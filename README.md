@@ -54,7 +54,7 @@ A sophisticated, fully client-side web application that analyzes 40+ Canadian cr
 Or run locally:
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/canadian-credit-card-stack-optimizer.git
+git clone https://github.com/m-tahmid/canadian-credit-card-stack-optimizer.git
 cd canadian-credit-card-stack-optimizer
 
 # Open in your browser (no build required)
