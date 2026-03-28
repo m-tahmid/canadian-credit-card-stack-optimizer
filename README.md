@@ -17,7 +17,6 @@ A sophisticated, fully client-side web application that analyzes 40+ Canadian cr
 - [Card Database](#-card-database)
 - [Architecture](#-architecture)
 - [Customization](#-customization)
-- [Contributing](#-contributing)
 
 ---
 
@@ -414,55 +413,11 @@ For a user with:
 
 ---
 
-## 🤝 Contributing
-
-Contributions are welcome! Here's how you can help:
-
-### Reporting Issues
-- **Card Data Errors:** Submit an issue with card name, incorrect field, and source
-- **Optimization Bugs:** Include spending inputs, profile settings, and expected vs. actual results
-- **UI/UX Issues:** Screenshots appreciated
-
-### Pull Requests
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/new-card`)
-3. Make your changes (follow existing code style)
-4. Test thoroughly across categories and income tiers
-5. Commit with clear messages (`git commit -m 'Add BMO Eclipse Visa Infinite'`)
-6. Push to your fork (`git push origin feature/new-card`)
-7. Open a Pull Request with description of changes
-
-### Card Data Updates
-When adding/updating cards, ensure:
-- Rates are confirmed from official bank sources (link in PR)
-- Income requirements are accurate
-- Caps are correctly specified (monthly vs. yearly)
-- Chexy/Casa compatibility is verified
-- Fee waiver conditions are current
-
-### Code Style
-- Use meaningful variable names
-- Comment complex logic (especially cap calculations)
-- Maintain existing formatting (2-space indent)
-- Keep functions focused and < 50 lines when possible
-
----
-
 ## 🙏 Acknowledgments
 
 - **Card data sources:** Official bank websites, RedFlagDeals forums, Prince of Travel, Milesopedia
 - **Design inspiration:** Linear, Stripe, Vercel
 - **Icon set:** Lucide (MIT licensed)
-
----
-
-## 📮 Contact
-
-Questions, suggestions, or just want to share your optimized stack?
-
-- **GitHub Issues:** [Report bugs or request features](https://github.com/yourusername/canadian-credit-card-stack-optimizer/issues)
-- **Email:** your.email@example.com
-- **Reddit:** u/yourusername (r/PersonalFinanceCanada)
 
 ---
 
