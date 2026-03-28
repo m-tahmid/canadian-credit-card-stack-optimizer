@@ -18,7 +18,6 @@ A sophisticated, fully client-side web application that analyzes 40+ Canadian cr
 - [Architecture](#-architecture)
 - [Customization](#-customization)
 - [Contributing](#-contributing)
-- [License](#-license)
 
 ---
 
@@ -446,14 +445,6 @@ When adding/updating cards, ensure:
 - Comment complex logic (especially cap calculations)
 - Maintain existing formatting (2-space indent)
 - Keep functions focused and < 50 lines when possible
-
----
-
-## 📝 License
-
-MIT License — See [LICENSE](LICENSE) file for details.
-
-**TL;DR:** Free to use, modify, and distribute. Attribution appreciated but not required.
 
 ---
 
