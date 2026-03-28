@@ -4,7 +4,6 @@
 
 A sophisticated, fully client-side web application that analyzes 40+ Canadian credit cards to recommend the perfect stack for your spending profile. Built with vanilla JavaScript — no frameworks, no build steps, no backend required.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![JavaScript](https://img.shields.io/badge/javascript-ES6+-yellow.svg)
 ![Status](https://img.shields.io/badge/status-active-success.svg)
 
@@ -50,7 +49,7 @@ A sophisticated, fully client-side web application that analyzes 40+ Canadian cr
 
 ## 🚀 Live Demo
 
-**Try it now:** [Your GitHub Pages URL]
+**Try it now:** [https://m-tahmid.github.io/canadian-credit-card-stack-optimizer]
 
 Or run locally:
 ```bash
