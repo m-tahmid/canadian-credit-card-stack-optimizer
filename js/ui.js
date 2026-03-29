@@ -609,8 +609,7 @@ function calculate(skipSpouseInit = false) {
             ]
           : [{ amount: monthly, candidates: stackCards, label: null, color: 'var(--muted)' }];
 
-        let catHtml = `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow-x:auto;">`;
-
+        let catHtml = `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;">`;
 
         let rowIdx = 0;
         for (const row of earnRows) {
@@ -673,14 +672,14 @@ function calculate(skipSpouseInit = false) {
           }
 
           catHtml += `
-            <div style="min-width:max-content;">
-              <div style="display:grid;grid-template-columns:90px 1fr 64px 44px 76px 46px;align-items:center;gap:8px;">
+            <div>
+              <div class="earn-rate-row" style="display:grid;grid-template-columns:90px 1fr 64px 44px 76px 46px;align-items:center;gap:8px;">
                 ${firstColHtml}
                 <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">
                   <div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div>
                 </div>
                 <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
-                <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSpend(annualSpend)}</span>
+                <span class="earn-rate-spend" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSpend(annualSpend)}</span>
                 <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortName}</span>
                 <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
               </div>
@@ -1324,21 +1323,29 @@ function renderCustomStack() {
     return effectiveRate(card, cat);
   };
 
-  // Compute gross value using custom rates (mirrors calcStackValue logic)
+  // Compute gross value using custom rates (mirrors calcStackValue logic including Amex split)
   const computeCustomGross = (cards) => {
     let gross = 0;
+    const amexFrac = profile.amexAcceptance ?? 0.8;
     for (const cat of cats) {
       const monthly = spend[cat] || 0;
       if (!monthly) continue;
-      let best = 0;
+      const amexAmt    = cat === 'rent' ? 0 : monthly * amexFrac;
+      const nonAmexAmt = monthly * (cat === 'rent' ? 1 : (1 - amexFrac));
+      let bestAmex = 0, bestNonAmex = 0;
       for (const card of cards) {
-        const rate = customEffRate(card, cat);
-        const ec   = computeEffectiveCaps(card, spend)[cat];
+        const rate    = customEffRate(card, cat);
+        const ec      = computeEffectiveCaps(card, spend)[cat];
         const capMult = window._spouseSet?.has(card.id) ? 2 : 1;
-        const eff  = ec ? Math.min(monthly, ec * capMult) : monthly;
-        best = Math.max(best, eff * rate);
+        if (card.network === 'amex') {
+          const eff = ec ? Math.min(amexAmt, ec * capMult) : amexAmt;
+          bestAmex = Math.max(bestAmex, eff * rate);
+        } else {
+          const eff = ec ? Math.min(nonAmexAmt, ec * capMult) : nonAmexAmt;
+          bestNonAmex = Math.max(bestNonAmex, eff * rate);
+        }
       }
-      gross += best * 12;
+      gross += (bestAmex + bestNonAmex) * 12;
     }
     cards.forEach(c => { gross += (c.perksValue || 0); });
     return Math.round(gross);
@@ -1398,8 +1405,11 @@ function renderCustomStack() {
     // Cards list
     html += `<div class="stack-cards" style="margin-bottom:16px;">`;
     stackCards.forEach((card, i) => {
+      const waivingBank = card.feeWaivedBy?.find(b => profile.activeBanking.has(b));
       const feeDisplay = card.effectiveFee === 0
-        ? (card.fee > 0 ? 'fee waived' : 'no annual fee')
+        ? (card.wsReq ? 'free — requires WS Premium'
+          : waivingBank ? `fee waived (${BANKING_LABELS[waivingBank]})`
+          : 'no annual fee')
         : `$${card.effectiveFee}/yr`;
 
       const winCats = cats.filter(cat => {
@@ -1479,16 +1489,14 @@ function renderCustomStack() {
       const rateCell = bestCard.pts && bestCard.cpp
         ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x${hasOverride ? `<span style="font-size:9px;color:var(--accent2);"> @${getCardCpp(bestCard).toFixed(2)}¢</span>` : ''}`
         : `${parseFloat((bestRate*100).toFixed(2))}%`;
-      html += `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow-x:auto;">
-        <div style="min-width:max-content;">
-          <div style="display:grid;grid-template-columns:90px 1fr 90px 44px 76px 46px;align-items:center;gap:8px;">
-            <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
-            <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
-            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
-            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSp(monthly * 12)}</span>
-            <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
-            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
-          </div>
+      html += `<div style="padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
+        <div class="earn-rate-row" style="display:grid;grid-template-columns:90px 1fr 90px 44px 76px 46px;align-items:center;gap:8px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
+          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
+          <span class="earn-rate-spend" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSp(monthly * 12)}</span>
+          <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
         </div>
       </div>`;
     }
