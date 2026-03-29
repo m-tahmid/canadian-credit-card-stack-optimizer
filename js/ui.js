@@ -1284,7 +1284,8 @@ function clearCustomStack() {
   if (window._allScored) renderCardGrid(window._allScored, window._currentFilter || 'all');
 }
 
-function setCustomCardCpp(cardId, value) {
+function setCustomCardCpp(cardId, value, inputEl) {
+  const rawValue = value;
   if (!window._customStackCpp) window._customStackCpp = {};
   const v = parseFloat(value);
   if (!isNaN(v) && v > 0) {
@@ -1293,6 +1294,11 @@ function setCustomCardCpp(cardId, value) {
     delete window._customStackCpp[cardId];
   }
   renderCustomStack();
+  const newInp = document.querySelector(`[data-cpp-card-id="${cardId}"]`);
+  if (newInp) {
+    newInp.value = rawValue;
+    newInp.focus();
+  }
 }
 
 function clearCustomCardCpp(cardId) {
@@ -1460,10 +1466,11 @@ function renderCustomStack() {
           <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${cppOverride != null ? 'var(--accent2)' : 'var(--t3)'};margin-bottom:7px;">${card.loyalty?.label || 'Points'} — Redemption Value</div>
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <label style="font-size:11px;color:var(--t2);white-space:nowrap;">Your CPP</label>
-            <input type="number" step="0.01" min="0.1" max="10"
+            <input type="text" inputmode="decimal"
               value="${cppOverride != null ? cppOverride : ''}"
               placeholder="${defaultCpp.toFixed(2)}"
-              onchange="setCustomCardCpp('${card.id}', this.value)"
+              data-cpp-card-id="${card.id}"
+              oninput="setCustomCardCpp('${card.id}', this.value, this)"
               style="width:72px;background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);text-align:right;">
             <span style="font-size:11px;color:var(--t3);">¢/pt</span>
             ${cppOverride != null ? `<button onclick="clearCustomCardCpp('${card.id}')" style="font-size:10px;color:var(--t3);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:inherit;">Reset</button>` : ''}
