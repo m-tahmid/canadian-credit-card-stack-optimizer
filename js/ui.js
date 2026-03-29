@@ -669,8 +669,8 @@ function calculate(skipSpouseInit = false) {
             : `${parseFloat((bestRate*100).toFixed(2))}%`;
 
           const catNameHtml = rowIdx === 0
-            ? `<div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;flex-shrink:0;">${catLabels[cat]}${showSplit && label ? `<div style="font-size:9px;color:${color};font-weight:400;">${label}</div>` : ''}</div>`
-            : `<div style="font-size:9px;color:${color};flex-shrink:0;">${label || ''}</div>`;
+            ? `<div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;width:108px;flex-shrink:0;">${catLabels[cat]}${showSplit && label ? `<div style="font-size:9px;color:${color};font-weight:400;">${label}</div>` : ''}</div>`
+            : `<div style="font-size:9px;color:${color};width:108px;flex-shrink:0;">${label || ''}</div>`;
 
           // Overflow when capped
           let ovHtml = '';
@@ -1298,6 +1298,7 @@ function setCustomCardCpp(cardId, value, inputEl) {
   if (newInp) {
     newInp.value = rawValue;
     newInp.focus();
+    newInp.setSelectionRange(rawValue.length, rawValue.length);
   }
 }
 
@@ -1333,7 +1334,11 @@ function renderCustomStack() {
   // Replicates effectiveRate() but uses getCardCpp for per-card overrides
   const customEffRate = (card, cat) => {
     if (card.pts && card.cpp) {
-      const cpp = profile.goal === 'cashback' ? card.cpp.stmt : getCardCpp(card);
+      // Per-card CPP override always wins; fall back to goal-based CPP if no override set
+      const override = window._customStackCpp?.[card.id];
+      const cpp = override != null
+        ? Math.min(override, loyaltyCppCeiling(card))
+        : (profile.goal === 'cashback' ? card.cpp.stmt : getEffectiveCpp(card));
       if (cat === 'rent') {
         const p = card.pts.rent || 0;
         if (p === 0 || profile.chexy !== 'yes') return 0;
@@ -1534,7 +1539,7 @@ function renderCustomStack() {
         : `${parseFloat((bestRate*100).toFixed(2))}%`;
       html += `<div style="padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-          <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;flex-shrink:0;">${catLabels[cat]}</div>
+          <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;width:108px;flex-shrink:0;">${catLabels[cat]}</div>
           <div style="flex:1;min-width:32px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
           <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);white-space:nowrap;flex-shrink:0;">+$${annual}</span>
         </div>
