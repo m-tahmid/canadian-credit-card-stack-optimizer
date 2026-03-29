@@ -1454,11 +1454,23 @@ function renderCustomStack() {
           </div>
         </div>` : '';
 
+      const hasAnyCap = (card.caps && Object.keys(card.caps).length > 0) || card.capGroups?.length > 0;
+      const inSpouseSet = window._spouseSet?.has(card.id);
+      const spouseHtml = hasAnyCap ? `
+        <div style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+          ${inSpouseSet
+            ? `<span style="font-size:11px;color:var(--yellow);">Partner also holds this card${card.fee > 0 ? ` · $${card.fee}/yr separately` : ''}</span>
+               <button onclick="toggleSpouseCard('${card.id}')" style="font-size:10px;color:var(--muted);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:inherit;">Just me</button>`
+            : `<button onclick="toggleSpouseCard('${card.id}')" style="font-size:10px;color:var(--accent);background:rgba(200,240,69,0.06);border:1px solid rgba(200,240,69,0.22);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:inherit;">+ Partner holds this card</button>`
+          }
+        </div>` : '';
+
       html += `<div class="stack-card" style="position:relative;padding-right:80px;">
         <div class="use-for" style="color:${roleColors[i % roleColors.length]}">${roleLabels[i] || 'Card '+(i+1)}</div>
         <div class="card-n">${card.name}</div>
         <div class="rate-info">${feeDisplay}</div>
         <div style="margin-top:4px;font-size:11px;color:var(--t2);line-height:1.4;">${useFor}</div>
+        ${spouseHtml}
         ${cppInputHtml}
         <button onclick="toggleCustomCard('${card.id}')" style="position:absolute;top:12px;right:12px;font-size:10px;color:var(--t3);background:none;border:1px solid var(--border);border-radius:4px;padding:3px 9px;cursor:pointer;font-family:inherit;white-space:nowrap;">Remove</button>
       </div>`;
