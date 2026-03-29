@@ -1223,6 +1223,7 @@ function toggleAllianceList() {
 // ── Custom Stack Builder ──
 window._customMode = false;
 window._customStackIds = new Set();
+window._customStackCpp = {};
 
 function toggleCustomBuilder() {
   window._customMode = !window._customMode;
@@ -1258,22 +1259,90 @@ function toggleCustomCard(cardId) {
 
 function clearCustomStack() {
   window._customStackIds = new Set();
+  window._customStackCpp = {};
   renderCustomStack();
   if (window._allScored) renderCardGrid(window._allScored, window._currentFilter || 'all');
+}
+
+function setCustomCardCpp(cardId, value) {
+  if (!window._customStackCpp) window._customStackCpp = {};
+  const v = parseFloat(value);
+  if (!isNaN(v) && v > 0) {
+    window._customStackCpp[cardId] = v;
+  } else {
+    delete window._customStackCpp[cardId];
+  }
+  renderCustomStack();
+}
+
+function clearCustomCardCpp(cardId) {
+  if (window._customStackCpp) delete window._customStackCpp[cardId];
+  renderCustomStack();
 }
 
 function renderCustomStack() {
   const section = document.getElementById('custom-stack-section');
   if (!section) return;
 
-  const ids    = window._customStackIds || new Set();
-  const spend  = window._lastSpend || {};
+  const ids        = window._customStackIds || new Set();
+  const spend      = window._lastSpend || {};
   const stackCards = [...ids].map(id => window._allScored?.find(c => c.id === id)).filter(Boolean);
 
   const cats      = ['groceries','dining','gas','recurring','rent','other','travel','fxTravel'];
   const catLabels = { groceries:'Groceries', dining:'Dining', gas:'Gas', recurring:'Recurring', rent:'Rent', other:'Other', travel:'Flights & Hotels', fxTravel:'FX Spend' };
   const roleColors = ['var(--accent)','var(--accent2)','var(--accent3)','var(--green)','var(--yellow)','var(--muted)'];
   const roleLabels = ['Primary','Companion','Third Card','Fourth Card','Fifth Card','Sixth Card'];
+
+  // Per-card CPP override: returns the CPP to use for a given card in this custom stack
+  const getCardCpp = (card) => {
+    if (!card.cpp) return 1.0;
+    const override = window._customStackCpp?.[card.id];
+    if (override != null) {
+      const ceiling = loyaltyCppCeiling(card);
+      return Math.min(override, ceiling);
+    }
+    return getEffectiveCpp(card);
+  };
+
+  // Replicates effectiveRate() but uses getCardCpp for per-card overrides
+  const customEffRate = (card, cat) => {
+    if (card.pts && card.cpp) {
+      const cpp = profile.goal === 'cashback' ? card.cpp.stmt : getCardCpp(card);
+      if (cat === 'rent') {
+        const p = card.pts.rent || 0;
+        if (p === 0 || profile.chexy !== 'yes') return 0;
+        const fee = card.network === 'visa' ? 0.0175 : card.network === 'mc' ? 0.0175 : 0;
+        return Math.max(0, p * cpp / 100 - fee);
+      }
+      if (cat === 'fxTravel') {
+        const p = card.pts.other || 0;
+        const gross = p * cpp / 100;
+        return card.noFx ? gross : Math.max(0, gross - 0.025);
+      }
+      return (card.pts[cat] || 0) * cpp / 100;
+    }
+    return effectiveRate(card, cat);
+  };
+
+  // Compute gross value using custom rates (mirrors calcStackValue logic)
+  const computeCustomGross = (cards) => {
+    let gross = 0;
+    for (const cat of cats) {
+      const monthly = spend[cat] || 0;
+      if (!monthly) continue;
+      let best = 0;
+      for (const card of cards) {
+        const rate = customEffRate(card, cat);
+        const ec   = computeEffectiveCaps(card, spend)[cat];
+        const capMult = window._spouseSet?.has(card.id) ? 2 : 1;
+        const eff  = ec ? Math.min(monthly, ec * capMult) : monthly;
+        best = Math.max(best, eff * rate);
+      }
+      gross += best * 12;
+    }
+    cards.forEach(c => { gross += (c.perksValue || 0); });
+    return Math.round(gross);
+  };
 
   let html = `<div class="stack-section" style="border:1px solid rgba(124,106,245,0.25);background:rgba(124,106,245,0.025);">
     <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
@@ -1290,11 +1359,10 @@ function renderCustomStack() {
       No cards added yet. Scroll down and click <strong style="color:var(--accent2);">+ Add to Custom Stack</strong> on any card.
     </div>`;
   } else {
-    const { gross, fees, net } = calcStackValue(stackCards, spend);
-    const totalAnnualSpend = cats.reduce((s, cat) => {
-      if (cat === 'travel' || cat === 'fxTravel') return s + (spend[cat] || 0) * 12;
-      return s + (spend[cat] || 0) * 12;
-    }, 0);
+    const gross = computeCustomGross(stackCards);
+    const fees  = stackCards.reduce((s, c) => s + c.effectiveFee, 0);
+    const net   = gross - fees;
+    const totalAnnualSpend = cats.reduce((s, cat) => s + (spend[cat] || 0) * 12, 0);
     const effPct = totalAnnualSpend > 0 ? (gross / totalAnnualSpend * 100).toFixed(1) : '—';
 
     // Value summary
@@ -1315,12 +1383,14 @@ function renderCustomStack() {
 
     // Compare vs recommended
     if (window._currentStack?.length > 0) {
-      const recValue = calcStackValue(window._currentStack, spend);
-      const diff = net - recValue.net;
+      const recGross = computeCustomGross(window._currentStack);
+      const recFees  = window._currentStack.reduce((s, c) => s + c.effectiveFee, 0);
+      const recNet   = recGross - recFees;
+      const diff = net - recNet;
       const sign  = diff >= 0 ? '+' : '−';
       const diffColor = diff >= 0 ? 'var(--green)' : '#c06060';
       html += `<div style="margin-bottom:16px;padding:9px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--t2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
-        <span>vs. recommended stack ($${recValue.net.toLocaleString()}/yr)</span>
+        <span>vs. recommended stack ($${recNet.toLocaleString()}/yr)</span>
         <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:${diffColor};">${sign}$${Math.abs(diff).toLocaleString()}</span>
       </div>`;
     }
@@ -1331,32 +1401,68 @@ function renderCustomStack() {
       const feeDisplay = card.effectiveFee === 0
         ? (card.fee > 0 ? 'fee waived' : 'no annual fee')
         : `$${card.effectiveFee}/yr`;
+
       const winCats = cats.filter(cat => {
         if ((spend[cat] || 0) === 0) return false;
-        const r = effectiveRate(card, cat);
-        return r > 0 && stackCards.every(c => effectiveRate(c, cat) <= r);
+        const r = customEffRate(card, cat);
+        return r > 0 && stackCards.every(c => customEffRate(c, cat) <= r);
       });
       const useFor = winCats.length
-        ? winCats.map(c => `${catLabels[c]} ${fmtRateFull(card, c)}`).join(' · ')
+        ? winCats.map(c => {
+            if (card.pts && card.cpp) {
+              const cpp = getCardCpp(card);
+              const pts = c === 'fxTravel' ? (card.pts.other || 0) : (card.pts[c] || 0);
+              return `${catLabels[c]} ${pts}x @ ${cpp.toFixed(2)}¢`;
+            }
+            return `${catLabels[c]} ${fmtRateFull(card, c)}`;
+          }).join(' · ')
         : 'Catch-all / backup';
+
+      // CPP override input for transferable/redeemable points cards
+      const showCppInput = card.pts && card.cpp && !card.loyalty?.isolated;
+      const cppOverride  = window._customStackCpp?.[card.id];
+      const defaultCpp   = getEffectiveCpp(card);
+      const activeCpp    = getCardCpp(card);
+
+      const cppInputHtml = showCppInput ? `
+        <div style="margin-top:10px;padding:10px 12px;background:var(--s2);border:1px solid ${cppOverride != null ? 'rgba(124,106,245,0.35)' : 'var(--border)'};border-radius:6px;">
+          <div style="font-size:9px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:${cppOverride != null ? 'var(--accent2)' : 'var(--t3)'};margin-bottom:7px;">${card.loyalty?.label || 'Points'} — Redemption Value</div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <label style="font-size:11px;color:var(--t2);white-space:nowrap;">Your CPP</label>
+            <input type="number" step="0.01" min="0.1" max="10"
+              value="${cppOverride != null ? cppOverride : ''}"
+              placeholder="${defaultCpp.toFixed(2)}"
+              onchange="setCustomCardCpp('${card.id}', this.value)"
+              style="width:72px;background:var(--s1);border:1px solid var(--border);border-radius:4px;padding:4px 8px;font-family:'DM Mono',monospace;font-size:13px;color:var(--text);text-align:right;">
+            <span style="font-size:11px;color:var(--t3);">¢/pt</span>
+            ${cppOverride != null ? `<button onclick="clearCustomCardCpp('${card.id}')" style="font-size:10px;color:var(--t3);background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;cursor:pointer;font-family:inherit;">Reset</button>` : ''}
+          </div>
+          <div style="margin-top:5px;font-size:10px;color:var(--t3);display:flex;gap:12px;flex-wrap:wrap;">
+            <span>${card.cpp.stmt}¢ stmt credit</span>
+            ${card.cpp.avgTravel ? `<span>${card.cpp.avgTravel}¢ avg travel</span>` : ''}
+            ${cppOverride != null ? `<span style="color:var(--accent2);font-weight:600;">Using ${activeCpp.toFixed(2)}¢ ↑</span>` : ''}
+          </div>
+        </div>` : '';
+
       html += `<div class="stack-card" style="position:relative;padding-right:80px;">
         <div class="use-for" style="color:${roleColors[i % roleColors.length]}">${roleLabels[i] || 'Card '+(i+1)}</div>
         <div class="card-n">${card.name}</div>
         <div class="rate-info">${feeDisplay}</div>
         <div style="margin-top:4px;font-size:11px;color:var(--t2);line-height:1.4;">${useFor}</div>
+        ${cppInputHtml}
         <button onclick="toggleCustomCard('${card.id}')" style="position:absolute;top:12px;right:12px;font-size:10px;color:var(--t3);background:none;border:1px solid var(--border);border-radius:4px;padding:3px 9px;cursor:pointer;font-family:inherit;white-space:nowrap;">Remove</button>
       </div>`;
     });
     html += `</div>`;
 
-    // Earn rates by category
+    // Earn rates by category (using custom rates)
     html += `<div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--t3);">Earn rates by category</div>`;
     for (const cat of cats) {
       const monthly = spend[cat] || 0;
       if (!monthly) continue;
       let bestCard = null, bestEarning = 0, bestRate = 0;
       for (const card of stackCards) {
-        const rate = effectiveRate(card, cat);
+        const rate = customEffRate(card, cat);
         const ec   = computeEffectiveCaps(card, spend)[cat];
         const eff  = ec ? Math.min(monthly, ec) : monthly;
         if (eff * rate > bestEarning) { bestEarning = eff * rate; bestCard = card; bestRate = rate; }
@@ -1369,12 +1475,13 @@ function renderCustomStack() {
       const barW   = Math.min(100, bestRate * 1500);
       const rc     = rateClass(bestRate);
       const short  = bestCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,2).join(' ');
+      const hasOverride = bestCard.pts && bestCard.cpp && window._customStackCpp?.[bestCard.id] != null;
       const rateCell = bestCard.pts && bestCard.cpp
-        ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x`
+        ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x${hasOverride ? `<span style="font-size:9px;color:var(--accent2);"> @${getCardCpp(bestCard).toFixed(2)}¢</span>` : ''}`
         : `${parseFloat((bestRate*100).toFixed(2))}%`;
       html += `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow-x:auto;">
         <div style="min-width:max-content;">
-          <div style="display:grid;grid-template-columns:90px 1fr 64px 44px 76px 46px;align-items:center;gap:8px;">
+          <div style="display:grid;grid-template-columns:90px 1fr 90px 44px 76px 46px;align-items:center;gap:8px;">
             <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
             <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
             <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
