@@ -645,18 +645,37 @@ function calculate(skipSpouseInit = false) {
             ? `<span style="display:block;line-height:1.2;">${bestCard.pts[cat] || bestCard.pts.other || 0}x<br><span style="font-size:9px;color:var(--accent2);">@${getEffectiveCpp(bestCard).toFixed(2)}¢</span></span>`
             : `${parseFloat((bestRate*100).toFixed(2))}%`;
 
-          // First column: category name on first row; network label on split rows
-          const firstColHtml = rowIdx === 0
-            ? `<div style="line-height:1.25;">
-                <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
-                ${showSplit && label ? `<div style="font-size:9px;color:${color};margin-top:1px;">${label}</div>` : ''}
-               </div>`
-            : `<div style="font-size:9px;color:${color};padding-left:2px;">${label || ''}</div>`;
+          // For group caps: only count spending in cats where this card is the best earner
+          let winningGroupSpend = 0;
+          if (isGroupCap) {
+            for (const c of capGroupSingle.cats) {
+              const catAmt = spend[c] || 0;
+              if (!catAmt) continue;
+              const bestForCat = candidates.reduce((best, card) => Math.max(best, effectiveRate(card, c)), 0);
+              if (effectiveRate(bestCard, c) >= bestForCat - 1e-9) winningGroupSpend += catAmt;
+            }
+          }
+          const isCappedFixed = rawCapSingle ? amount > rawCapSingle * capMult2
+            : isGroupCap ? winningGroupSpend > capGroupSingle.monthly * capMult2 : false;
+          const bestCapFixed = rawCapSingle ? rawCapSingle * capMult2
+            : isGroupCap && winningGroupSpend > 0
+              ? capGroupSingle.monthly * capMult2 * amount / winningGroupSpend
+              : undefined;
+          const effAmtFixed = bestCapFixed ? Math.min(amount, bestCapFixed) : amount;
+          const annualFixed = Math.round(effAmtFixed * 12 * bestRate);
+
+          const rateLabel = bestCard.pts && bestCard.cpp
+            ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x @${getEffectiveCpp(bestCard).toFixed(2)}¢`
+            : `${parseFloat((bestRate*100).toFixed(2))}%`;
+
+          const catNameHtml = rowIdx === 0
+            ? `<div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;flex-shrink:0;">${catLabels[cat]}${showSplit && label ? `<div style="font-size:9px;color:${color};font-weight:400;">${label}</div>` : ''}</div>`
+            : `<div style="font-size:9px;color:${color};flex-shrink:0;">${label || ''}</div>`;
 
           // Overflow when capped
           let ovHtml = '';
-          if (isCapped) {
-            const ovAmt = amount - bestCap;
+          if (isCappedFixed) {
+            const ovAmt = amount - bestCapFixed;
             let ovCard = null, ovEarn = 0;
             for (const oc of stackCards) {
               if (oc.id === bestCard.id) continue;
@@ -665,23 +684,25 @@ function calculate(skipSpouseInit = false) {
             }
             if (ovCard) {
               const ovRate = effectiveRate(ovCard, cat);
-              const ovShort = ovCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,2).join(' ');
+              const ovShort = ovCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,3).join(' ');
               const ovStr = ovCard.pts?.[cat] ? `${ovCard.pts[cat]}x` : `${parseFloat((ovRate*100).toFixed(2))}%`;
-              ovHtml = `<div style="padding-left:2px;font-size:9px;color:var(--t3);margin-top:2px;">↳ overflow → ${ovShort} @ ${ovStr}</div>`;
+              ovHtml = `<div style="font-size:9px;color:var(--t3);margin-top:3px;padding-left:4px;">↳ overflow → ${ovShort} @ ${ovStr}</div>`;
             }
           }
 
           catHtml += `
-            <div>
-              <div class="earn-rate-row" style="display:grid;grid-template-columns:90px 1fr 64px 44px 76px 46px;align-items:center;gap:8px;">
-                ${firstColHtml}
-                <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">
+            <div style="margin-bottom:2px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+                ${catNameHtml}
+                <div style="flex:1;min-width:32px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">
                   <div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div>
                 </div>
-                <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;">${rateCell}</span>
-                <span class="earn-rate-spend" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSpend(annualSpend)}</span>
-                <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortName}</span>
-                <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
+                <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);white-space:nowrap;flex-shrink:0;">+$${annualFixed}</span>
+              </div>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text);flex-shrink:0;white-space:nowrap;">${rateLabel}</span>
+                <span style="font-size:10px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortName}</span>
+                <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);white-space:nowrap;flex-shrink:0;">${fmtSpend(annualSpend)}</span>
               </div>
               ${ovHtml}
             </div>
@@ -1501,14 +1522,19 @@ function renderCustomStack() {
       const rateCell = bestCard.pts && bestCard.cpp
         ? `<span style="display:block;line-height:1.2;">${bestCard.pts[cat] || bestCard.pts.other || 0}x<br><span style="font-size:9px;color:var(--accent2);">@${getCardCpp(bestCard).toFixed(2)}¢</span></span>`
         : `${parseFloat((bestRate*100).toFixed(2))}%`;
+      const rateLabel = bestCard.pts && bestCard.cpp
+        ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x @${getCardCpp(bestCard).toFixed(2)}¢`
+        : `${parseFloat((bestRate*100).toFixed(2))}%`;
       html += `<div style="padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
-        <div class="earn-rate-row" style="display:grid;grid-template-columns:90px 1fr 90px 44px 76px 46px;align-items:center;gap:8px;">
-          <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
-          <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
-          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;">${rateCell}</span>
-          <span class="earn-rate-spend" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSp(monthly * 12)}</span>
-          <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
-          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
+          <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;flex-shrink:0;">${catLabels[cat]}</div>
+          <div style="flex:1;min-width:32px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);white-space:nowrap;flex-shrink:0;">+$${annual}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text);flex-shrink:0;white-space:nowrap;">${rateLabel}</span>
+          <span style="font-size:10px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);white-space:nowrap;flex-shrink:0;">${fmtSp(monthly * 12)}</span>
         </div>
       </div>`;
     }

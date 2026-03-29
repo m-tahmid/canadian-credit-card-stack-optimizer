@@ -590,6 +590,4 @@
     .stat-value { font-size: 24px; }
     .section-action { flex-direction: column; }
     .btn-primary, .btn-ghost { width: 100%; text-align: center; padding: 15px; font-size: 15px; }
-    .earn-rate-row { grid-template-columns: 72px 1fr 52px 58px 40px !important; gap: 5px !important; }
-    .earn-rate-spend { display: none !important; }
   }
