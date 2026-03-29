@@ -455,8 +455,9 @@ function calculate(skipSpouseInit = false) {
         : waivingBank ? `fee waived (${BANKING_LABELS[waivingBank]})`
         : 'no annual fee')
       : `$${card.effectiveFee}/yr`;
+    const _capMult = window._spouseSet?.has(card.id) ? 2 : 1;
     const _effCapsSpouse = computeEffectiveCaps(card, spend);
-    const overflowCats = cats.filter(cat => _effCapsSpouse[cat] !== undefined && (spend[cat] || 0) > _effCapsSpouse[cat]);
+    const overflowCats = cats.filter(cat => _effCapsSpouse[cat] !== undefined && (spend[cat] || 0) > _effCapsSpouse[cat] * _capMult);
     const inSpouseSet = window._spouseSet?.has(card.id);
     let spouseNote = '';
     if (overflowCats.length) {
@@ -608,7 +609,8 @@ function calculate(skipSpouseInit = false) {
             ]
           : [{ amount: monthly, candidates: stackCards, label: null, color: 'var(--muted)' }];
 
-        let catHtml = `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;">`;
+        let catHtml = `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;overflow-x:auto;">`;
+
 
         let rowIdx = 0;
         for (const row of earnRows) {
@@ -671,7 +673,7 @@ function calculate(skipSpouseInit = false) {
           }
 
           catHtml += `
-            <div>
+            <div style="min-width:max-content;">
               <div style="display:grid;grid-template-columns:90px 1fr 64px 44px 76px 46px;align-items:center;gap:8px;">
                 ${firstColHtml}
                 <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">
@@ -855,10 +857,14 @@ function calculate(skipSpouseInit = false) {
 
   document.getElementById('recommended-stack').innerHTML = stackHtml + '</div>';
 
+  const customBar = document.getElementById('custom-builder-bar');
+  if (customBar) customBar.style.display = 'block';
 
   // All cards grid — preserve current filter when recalculating in place
   window._allScored = scored;
   renderCardGrid(scored, skipSpouseInit ? (window._currentFilter || 'all') : 'all');
+
+  if (window._customMode) renderCustomStack();
 }
 
 function renderCardGrid(cards, filter) {
@@ -1032,6 +1038,10 @@ function renderCardGrid(cards, filter) {
           <div class="card-name">${card.name}</div>
           <span class="card-type-badge ${badgeClass}">${badgeLabel}</span>
           ${perksMatchHtml}
+          ${window._customMode ? (() => {
+            const inCustom = window._customStackIds?.has(card.id);
+            return `<button onclick="toggleCustomCard('${card.id}')" style="margin-top:8px;display:inline-block;font-size:10px;color:${inCustom ? 'var(--accent2)' : 'var(--t2)'};background:${inCustom ? 'rgba(124,106,245,0.12)' : 'none'};border:1px solid ${inCustom ? 'rgba(124,106,245,0.4)' : 'var(--border)'};border-radius:4px;padding:4px 12px;cursor:pointer;font-family:inherit;transition:all 0.15s;">${inCustom ? '✓ In Custom Stack' : '+ Add to Custom Stack'}</button>`;
+          })() : ''}
         </div>
         <div class="card-body">
           <div class="net-value">
@@ -1208,4 +1218,175 @@ function toggleAllianceList() {
   const isOpen = list.style.display !== 'none';
   list.style.display = isOpen ? 'none' : 'block';
   btn.innerHTML = isOpen ? '▼ Full alliance membership lists' : '▲ Hide alliance lists';
+}
+
+// ── Custom Stack Builder ──
+window._customMode = false;
+window._customStackIds = new Set();
+
+function toggleCustomBuilder() {
+  window._customMode = !window._customMode;
+  const wrap = document.getElementById('custom-stack-wrap');
+  const btn  = document.getElementById('custom-builder-btn');
+  if (window._customMode) {
+    wrap.style.display = 'block';
+    btn.textContent = '✕ Close Custom Builder';
+    btn.style.color = 'var(--accent2)';
+    btn.style.borderColor = 'rgba(124,106,245,0.4)';
+    btn.style.background = 'rgba(124,106,245,0.07)';
+    renderCustomStack();
+  } else {
+    wrap.style.display = 'none';
+    btn.textContent = '＋ Build Custom Stack';
+    btn.style.color = 'var(--t2)';
+    btn.style.borderColor = 'var(--border)';
+    btn.style.background = 'none';
+  }
+  if (window._allScored) renderCardGrid(window._allScored, window._currentFilter || 'all');
+}
+
+function toggleCustomCard(cardId) {
+  if (!window._customStackIds) window._customStackIds = new Set();
+  if (window._customStackIds.has(cardId)) {
+    window._customStackIds.delete(cardId);
+  } else {
+    window._customStackIds.add(cardId);
+  }
+  renderCustomStack();
+  if (window._allScored) renderCardGrid(window._allScored, window._currentFilter || 'all');
+}
+
+function clearCustomStack() {
+  window._customStackIds = new Set();
+  renderCustomStack();
+  if (window._allScored) renderCardGrid(window._allScored, window._currentFilter || 'all');
+}
+
+function renderCustomStack() {
+  const section = document.getElementById('custom-stack-section');
+  if (!section) return;
+
+  const ids    = window._customStackIds || new Set();
+  const spend  = window._lastSpend || {};
+  const stackCards = [...ids].map(id => window._allScored?.find(c => c.id === id)).filter(Boolean);
+
+  const cats      = ['groceries','dining','gas','recurring','rent','other','travel','fxTravel'];
+  const catLabels = { groceries:'Groceries', dining:'Dining', gas:'Gas', recurring:'Recurring', rent:'Rent', other:'Other', travel:'Flights & Hotels', fxTravel:'FX Spend' };
+  const roleColors = ['var(--accent)','var(--accent2)','var(--accent3)','var(--green)','var(--yellow)','var(--muted)'];
+  const roleLabels = ['Primary','Companion','Third Card','Fourth Card','Fifth Card','Sixth Card'];
+
+  let html = `<div class="stack-section" style="border:1px solid rgba(124,106,245,0.25);background:rgba(124,106,245,0.025);">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent2)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        <h2 style="color:var(--text);">Custom Stack</h2>
+      </div>
+      ${stackCards.length > 0 ? `<button onclick="clearCustomStack()" style="font-size:10px;color:var(--t3);background:none;border:1px solid var(--border);border-radius:5px;padding:4px 10px;cursor:pointer;font-family:inherit;">Clear all</button>` : ''}
+    </div>
+    <div class="subtitle">Build your own stack — click <strong>+ Add to Custom Stack</strong> on any card below</div>`;
+
+  if (stackCards.length === 0) {
+    html += `<div style="padding:24px 0;text-align:center;color:var(--t2);font-size:13px;border-top:1px solid var(--border);margin-top:16px;">
+      No cards added yet. Scroll down and click <strong style="color:var(--accent2);">+ Add to Custom Stack</strong> on any card.
+    </div>`;
+  } else {
+    const { gross, fees, net } = calcStackValue(stackCards, spend);
+    const totalAnnualSpend = cats.reduce((s, cat) => {
+      if (cat === 'travel' || cat === 'fxTravel') return s + (spend[cat] || 0) * 12;
+      return s + (spend[cat] || 0) * 12;
+    }, 0);
+    const effPct = totalAnnualSpend > 0 ? (gross / totalAnnualSpend * 100).toFixed(1) : '—';
+
+    // Value summary
+    html += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px;margin-bottom:16px;">
+      <div style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+        <div style="font-family:'DM Serif Display',serif;font-size:26px;color:${net >= 0 ? 'var(--accent2)' : '#c06060'};line-height:1;">${net >= 0 ? '$'+net.toLocaleString() : '−$'+Math.abs(net).toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--t2);margin-top:3px;">net / year</div>
+      </div>
+      <div style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+        <div style="font-family:'DM Serif Display',serif;font-size:26px;color:var(--text);line-height:1;">$${gross.toLocaleString()}</div>
+        <div style="font-size:10px;color:var(--t2);margin-top:3px;">gross / year</div>
+      </div>
+      <div style="background:var(--s1);border:1px solid var(--border);border-radius:8px;padding:12px 14px;">
+        <div style="font-family:'DM Mono',monospace;font-size:22px;color:var(--text);line-height:1;">${effPct}%</div>
+        <div style="font-size:10px;color:var(--t2);margin-top:3px;">effective return</div>
+      </div>
+    </div>`;
+
+    // Compare vs recommended
+    if (window._currentStack?.length > 0) {
+      const recValue = calcStackValue(window._currentStack, spend);
+      const diff = net - recValue.net;
+      const sign  = diff >= 0 ? '+' : '−';
+      const diffColor = diff >= 0 ? 'var(--green)' : '#c06060';
+      html += `<div style="margin-bottom:16px;padding:9px 14px;background:var(--s2);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--t2);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+        <span>vs. recommended stack ($${recValue.net.toLocaleString()}/yr)</span>
+        <span style="font-family:'DM Mono',monospace;font-size:13px;font-weight:700;color:${diffColor};">${sign}$${Math.abs(diff).toLocaleString()}</span>
+      </div>`;
+    }
+
+    // Cards list
+    html += `<div class="stack-cards" style="margin-bottom:16px;">`;
+    stackCards.forEach((card, i) => {
+      const feeDisplay = card.effectiveFee === 0
+        ? (card.fee > 0 ? 'fee waived' : 'no annual fee')
+        : `$${card.effectiveFee}/yr`;
+      const winCats = cats.filter(cat => {
+        if ((spend[cat] || 0) === 0) return false;
+        const r = effectiveRate(card, cat);
+        return r > 0 && stackCards.every(c => effectiveRate(c, cat) <= r);
+      });
+      const useFor = winCats.length
+        ? winCats.map(c => `${catLabels[c]} ${fmtRateFull(card, c)}`).join(' · ')
+        : 'Catch-all / backup';
+      html += `<div class="stack-card" style="position:relative;padding-right:80px;">
+        <div class="use-for" style="color:${roleColors[i % roleColors.length]}">${roleLabels[i] || 'Card '+(i+1)}</div>
+        <div class="card-n">${card.name}</div>
+        <div class="rate-info">${feeDisplay}</div>
+        <div style="margin-top:4px;font-size:11px;color:var(--t2);line-height:1.4;">${useFor}</div>
+        <button onclick="toggleCustomCard('${card.id}')" style="position:absolute;top:12px;right:12px;font-size:10px;color:var(--t3);background:none;border:1px solid var(--border);border-radius:4px;padding:3px 9px;cursor:pointer;font-family:inherit;white-space:nowrap;">Remove</button>
+      </div>`;
+    });
+    html += `</div>`;
+
+    // Earn rates by category
+    html += `<div style="margin-bottom:8px;font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--t3);">Earn rates by category</div>`;
+    for (const cat of cats) {
+      const monthly = spend[cat] || 0;
+      if (!monthly) continue;
+      let bestCard = null, bestEarning = 0, bestRate = 0;
+      for (const card of stackCards) {
+        const rate = effectiveRate(card, cat);
+        const ec   = computeEffectiveCaps(card, spend)[cat];
+        const eff  = ec ? Math.min(monthly, ec) : monthly;
+        if (eff * rate > bestEarning) { bestEarning = eff * rate; bestCard = card; bestRate = rate; }
+      }
+      if (!bestCard) continue;
+      const ec     = computeEffectiveCaps(bestCard, spend)[cat];
+      const effAmt = ec ? Math.min(monthly, ec) : monthly;
+      const annual = Math.round(effAmt * 12 * bestRate);
+      const fmtSp  = v => v >= 1000 ? `$${Math.round(v/1000)}K` : `$${Math.round(v)}`;
+      const barW   = Math.min(100, bestRate * 1500);
+      const rc     = rateClass(bestRate);
+      const short  = bestCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,2).join(' ');
+      const rateCell = bestCard.pts && bestCard.cpp
+        ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x`
+        : `${parseFloat((bestRate*100).toFixed(2))}%`;
+      html += `<div style="display:flex;flex-direction:column;gap:6px;padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;overflow-x:auto;">
+        <div style="min-width:max-content;">
+          <div style="display:grid;grid-template-columns:90px 1fr 64px 44px 76px 46px;align-items:center;gap:8px;">
+            <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
+            <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
+            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSp(monthly * 12)}</span>
+            <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
+            <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
+          </div>
+        </div>
+      </div>`;
+    }
+  }
+
+  html += `</div>`;
+  section.innerHTML = html;
 }
