@@ -642,7 +642,7 @@ function calculate(skipSpouseInit = false) {
           const rc = rateClass(bestRate);
           const shortName = bestCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,2).join(' ');
           const rateCell = bestCard.pts && bestCard.cpp
-            ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x<span style="font-size:9px;color:var(--accent2);"> @${getEffectiveCpp(bestCard).toFixed(2)}¢</span>`
+            ? `<span style="display:block;line-height:1.2;">${bestCard.pts[cat] || bestCard.pts.other || 0}x<br><span style="font-size:9px;color:var(--accent2);">@${getEffectiveCpp(bestCard).toFixed(2)}¢</span></span>`
             : `${parseFloat((bestRate*100).toFixed(2))}%`;
 
           // First column: category name on first row; network label on split rows
@@ -678,7 +678,7 @@ function calculate(skipSpouseInit = false) {
                 <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">
                   <div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div>
                 </div>
-                <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
+                <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;">${rateCell}</span>
                 <span class="earn-rate-spend" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSpend(annualSpend)}</span>
                 <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortName}</span>
                 <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
@@ -1499,13 +1499,13 @@ function renderCustomStack() {
       const short  = bestCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,2).join(' ');
       const hasOverride = bestCard.pts && bestCard.cpp && window._customStackCpp?.[bestCard.id] != null;
       const rateCell = bestCard.pts && bestCard.cpp
-        ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x${hasOverride ? `<span style="font-size:9px;color:var(--accent2);"> @${getCardCpp(bestCard).toFixed(2)}¢</span>` : ''}`
+        ? `<span style="display:block;line-height:1.2;">${bestCard.pts[cat] || bestCard.pts.other || 0}x<br><span style="font-size:9px;color:var(--accent2);">@${getCardCpp(bestCard).toFixed(2)}¢</span></span>`
         : `${parseFloat((bestRate*100).toFixed(2))}%`;
       html += `<div style="padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
         <div class="earn-rate-row" style="display:grid;grid-template-columns:90px 1fr 90px 44px 76px 46px;align-items:center;gap:8px;">
           <div style="font-size:11px;font-weight:600;color:var(--text);white-space:nowrap;">${catLabels[cat]}</div>
           <div style="height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
-          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;white-space:nowrap;">${rateCell}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--text);text-align:right;">${rateCell}</span>
           <span class="earn-rate-spend" style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);text-align:right;white-space:nowrap;">${fmtSp(monthly * 12)}</span>
           <span style="font-size:10px;color:var(--t2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
           <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);text-align:right;">+$${annual}</span>
