@@ -625,14 +625,22 @@ function calculate(skipSpouseInit = false) {
             const eff = cap ? Math.min(amount, cap) : amount;
             if (eff * rate > bestEarning) { bestEarning = eff * rate; bestCard = card; bestRate = rate; }
           }
+          // Fallback: for rent/fxTravel, look outside the stack if no stack card covers it
+          let notInStack = false;
+          if (!bestCard && (cat === 'rent' || cat === 'fxTravel')) {
+            for (const card of (window._allScored || [])) {
+              if (candidates.some(c => c.id === card.id)) continue;
+              const rate = effectiveRate(card, cat);
+              if (rate > bestRate) { bestRate = rate; bestCard = card; }
+            }
+            notInStack = bestCard != null;
+          }
           if (!bestCard) continue;
           const capMult2 = window._spouseSet?.has(bestCard.id) ? 2 : 1;
           const rawCapSingle = bestCard.caps?.[cat];
           const capGroupSingle = bestCard.capGroups?.find(g => g.cats.includes(cat));
           const isGroupCap = !rawCapSingle && !!capGroupSingle;
           const totalGroupSpend = capGroupSingle ? capGroupSingle.cats.reduce((s, c) => s + (spend[c] || 0), 0) : 0;
-          const isCapped = rawCapSingle ? amount > rawCapSingle * capMult2
-            : isGroupCap ? totalGroupSpend > capGroupSingle.monthly * capMult2 : false;
           const effCapForAmt = computeEffectiveCaps(bestCard, spend)[cat];
           const bestCap = effCapForAmt ? effCapForAmt * capMult2 : undefined;
           const effAmt = bestCap ? Math.min(amount, bestCap) : amount;
@@ -698,14 +706,14 @@ function calculate(skipSpouseInit = false) {
                 <div style="flex:1;min-width:32px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;">
                   <div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div>
                 </div>
-                <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);white-space:nowrap;flex-shrink:0;">+$${annualFixed}</span>
+                <span style="font-family:'DM Mono',monospace;font-size:11px;color:${notInStack ? 'var(--t3)' : 'var(--green)'};white-space:nowrap;flex-shrink:0;">${notInStack ? '—' : `+$${annualFixed}`}</span>
               </div>
               <div style="display:flex;align-items:center;gap:8px;">
-                <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text);flex-shrink:0;white-space:nowrap;">${rateLabel}</span>
-                <span style="font-size:10px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${shortName}</span>
+                <span style="font-family:'DM Mono',monospace;font-size:10px;color:${notInStack ? 'var(--t3)' : 'var(--text)'};flex-shrink:0;white-space:nowrap;">${notInStack ? '—' : rateLabel}</span>
+                <span style="font-size:10px;color:var(--t3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${notInStack ? `${shortName} could cover this (+$${annualFixed}/yr) — not in stack` : shortName}</span>
                 <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);white-space:nowrap;flex-shrink:0;">${fmtSpend(annualSpend)}</span>
               </div>
-              ${ovHtml}
+              ${notInStack ? '' : ovHtml}
             </div>
           `;
           rowIdx++;
@@ -1538,6 +1546,16 @@ function renderCustomStack() {
         const eff  = ec ? Math.min(monthly, ec) : monthly;
         if (eff * rate > bestEarning) { bestEarning = eff * rate; bestCard = card; bestRate = rate; }
       }
+      // Fallback for rent/fxTravel: show best eligible card even if not in custom stack
+      let notInStack = false;
+      if (!bestCard && (cat === 'rent' || cat === 'fxTravel')) {
+        for (const card of (window._allScored || [])) {
+          if (ids.has(card.id)) continue;
+          const rate = effectiveRate(card, cat);
+          if (rate > bestRate) { bestRate = rate; bestCard = card; }
+        }
+        notInStack = bestCard != null;
+      }
       if (!bestCard) continue;
       const ec     = computeEffectiveCaps(bestCard, spend)[cat];
       const effAmt = ec ? Math.min(monthly, ec) : monthly;
@@ -1546,22 +1564,19 @@ function renderCustomStack() {
       const barW   = Math.min(100, bestRate * 1500);
       const rc     = rateClass(bestRate);
       const short  = bestCard.name.replace('Visa Infinite','VI').replace('Mastercard','MC').replace('World Elite','WE').split(' ').slice(0,2).join(' ');
-      const hasOverride = bestCard.pts && bestCard.cpp && window._customStackCpp?.[bestCard.id] != null;
-      const rateCell = bestCard.pts && bestCard.cpp
-        ? `<span style="display:block;line-height:1.2;">${bestCard.pts[cat] || bestCard.pts.other || 0}x<br><span style="font-size:9px;color:var(--accent2);">@${getCardCpp(bestCard).toFixed(2)}¢</span></span>`
-        : `${parseFloat((bestRate*100).toFixed(2))}%`;
-      const rateLabel = bestCard.pts && bestCard.cpp
-        ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x @${getCardCpp(bestCard).toFixed(2)}¢`
-        : `${parseFloat((bestRate*100).toFixed(2))}%`;
-      html += `<div style="padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;">
+      const rateLabel = notInStack ? '—'
+        : bestCard.pts && bestCard.cpp
+          ? `${bestCard.pts[cat] || bestCard.pts.other || 0}x @${getCardCpp(bestCard).toFixed(2)}¢`
+          : `${parseFloat((bestRate*100).toFixed(2))}%`;
+      html += `<div style="padding:10px 12px;background:var(--s1);border:1px solid var(--border);border-radius:8px;margin-bottom:6px;${notInStack ? 'opacity:0.6;' : ''}">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
           <div style="font-size:11px;font-weight:600;color:var(--text);line-height:1.25;width:108px;flex-shrink:0;">${catLabels[cat]}</div>
-          <div style="flex:1;min-width:32px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${rc}" style="width:${barW}%;height:100%;border-radius:6px;"></div></div>
-          <span style="font-family:'DM Mono',monospace;font-size:11px;color:var(--green);white-space:nowrap;flex-shrink:0;">+$${annual}</span>
+          <div style="flex:1;min-width:32px;height:6px;background:rgba(255,255,255,0.06);border-radius:6px;overflow:hidden;"><div class="rate-bar ${notInStack ? 'rate-bar-muted' : rc}" style="width:${notInStack ? barW : barW}%;height:100%;border-radius:6px;${notInStack ? 'background:var(--t3);' : ''}"></div></div>
+          <span style="font-family:'DM Mono',monospace;font-size:11px;color:${notInStack ? 'var(--t3)' : 'var(--green)'};white-space:nowrap;flex-shrink:0;">${notInStack ? '—' : `+$${annual}`}</span>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--text);flex-shrink:0;white-space:nowrap;">${rateLabel}</span>
-          <span style="font-size:10px;color:var(--t2);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${short}</span>
+          <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);flex-shrink:0;white-space:nowrap;">${rateLabel}</span>
+          <span style="font-size:10px;color:var(--t3);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${notInStack ? `${short} could earn +$${annual}/yr — not in stack` : short}</span>
           <span style="font-family:'DM Mono',monospace;font-size:10px;color:var(--t3);white-space:nowrap;flex-shrink:0;">${fmtSp(monthly * 12)}</span>
         </div>
       </div>`;
