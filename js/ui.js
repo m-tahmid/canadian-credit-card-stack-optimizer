@@ -1404,17 +1404,20 @@ function renderCustomStack() {
     const hasNonAmex = stackCards.some(c => c.network !== 'amex');
     const needsFallback = hasAmex && !hasNonAmex && amexFrac < 1;
 
-    // Auto-supplement with the best non-Amex card from the recommended stack so
-    // non-Amex spend isn't silently zeroed out.
-    let fallbackCard = null;
-    let calcCards = stackCards;
-    if (needsFallback && window._currentStack?.length > 0) {
-      fallbackCard = window._currentStack.find(c => c.network !== 'amex' && !ids.has(c.id));
-      if (fallbackCard) calcCards = [...stackCards, fallbackCard];
+    // Hard block: require a non-Amex card before showing results
+    if (needsFallback) {
+      const pct = Math.round((1 - amexFrac) * 100);
+      html += `<div style="margin-top:16px;padding:16px;background:rgba(255,160,30,0.07);border:1px solid rgba(255,160,30,0.35);border-radius:10px;text-align:center;">
+        <div style="font-size:14px;font-weight:600;color:var(--yellow);margin-bottom:6px;">Add a Visa or Mastercard to continue</div>
+        <div style="font-size:12px;color:var(--t2);line-height:1.5;">Amex isn't accepted everywhere — ${pct}% of your spend won't earn anything without a Visa/MC in your stack.<br>Scroll down and add a non-Amex card to see your results.</div>
+      </div>`;
+      html += `</div>`;
+      section.innerHTML = html;
+      return;
     }
 
-    const gross = computeCustomGross(calcCards);
-    const fees  = calcCards.reduce((s, c) => s + c.effectiveFee, 0);
+    const gross = computeCustomGross(stackCards);
+    const fees  = stackCards.reduce((s, c) => s + c.effectiveFee, 0);
     const net   = gross - fees;
     const totalAnnualSpend = cats.reduce((s, cat) => s + (spend[cat] || 0) * 12, 0);
     const effPct = totalAnnualSpend > 0 ? (gross / totalAnnualSpend * 100).toFixed(1) : '—';
@@ -1434,15 +1437,6 @@ function renderCustomStack() {
         <div style="font-size:10px;color:var(--t2);margin-top:3px;">effective return</div>
       </div>
     </div>`;
-
-    // Amex-only warning banner
-    if (needsFallback) {
-      const pct = Math.round((1 - amexFrac) * 100);
-      const fallbackName = fallbackCard ? `<strong>${fallbackCard.name}</strong>` : 'a Visa/Mastercard';
-      html += `<div style="margin-bottom:12px;padding:9px 13px;background:rgba(255,160,30,0.07);border:1px solid rgba(255,160,30,0.28);border-radius:8px;font-size:11px;color:var(--yellow);line-height:1.45;">
-        Amex isn't accepted everywhere — ${fallbackCard ? `${fallbackName} (from your recommended stack) has been added as a non-Amex fallback to cover the ${pct}% of spend Amex can't handle. Add it to your stack to replace the auto-fill.` : `Add ${fallbackName} to cover the ${pct}% of spend where Amex isn't accepted.`}
-      </div>`;
-    }
 
     // Compare vs recommended
     if (window._lastStackNet != null) {
