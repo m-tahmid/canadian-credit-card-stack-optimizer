@@ -300,6 +300,7 @@ function calculate(skipSpouseInit = false) {
   const stackCards = window._topStacks?.[window._altIdx || 0]?.cards || buildOptimalStack(eligibleCards, spend, maxCards);
   window._currentStack = stackCards;
   const { gross: stackGross, fees: stackFees, net: stackNet } = calcStackValue(stackCards, spend);
+  window._lastStackNet = stackNet;
 
   // ── Compute points per loyalty program ──
   const _stackPtsByProgram = {}; // { label: { pts, stmtCpp, card } }
@@ -1398,8 +1399,22 @@ function renderCustomStack() {
       No cards added yet. Scroll down and click <strong style="color:var(--accent2);">+ Add to Custom Stack</strong> on any card.
     </div>`;
   } else {
-    const gross = computeCustomGross(stackCards);
-    const fees  = stackCards.reduce((s, c) => s + c.effectiveFee, 0);
+    const amexFrac = profile.amexAcceptance ?? 0.8;
+    const hasAmex    = stackCards.some(c => c.network === 'amex');
+    const hasNonAmex = stackCards.some(c => c.network !== 'amex');
+    const needsFallback = hasAmex && !hasNonAmex && amexFrac < 1;
+
+    // Auto-supplement with the best non-Amex card from the recommended stack so
+    // non-Amex spend isn't silently zeroed out.
+    let fallbackCard = null;
+    let calcCards = stackCards;
+    if (needsFallback && window._currentStack?.length > 0) {
+      fallbackCard = window._currentStack.find(c => c.network !== 'amex' && !ids.has(c.id));
+      if (fallbackCard) calcCards = [...stackCards, fallbackCard];
+    }
+
+    const gross = computeCustomGross(calcCards);
+    const fees  = calcCards.reduce((s, c) => s + c.effectiveFee, 0);
     const net   = gross - fees;
     const totalAnnualSpend = cats.reduce((s, cat) => s + (spend[cat] || 0) * 12, 0);
     const effPct = totalAnnualSpend > 0 ? (gross / totalAnnualSpend * 100).toFixed(1) : '—';
@@ -1420,11 +1435,18 @@ function renderCustomStack() {
       </div>
     </div>`;
 
+    // Amex-only warning banner
+    if (needsFallback) {
+      const pct = Math.round((1 - amexFrac) * 100);
+      const fallbackName = fallbackCard ? `<strong>${fallbackCard.name}</strong>` : 'a Visa/Mastercard';
+      html += `<div style="margin-bottom:12px;padding:9px 13px;background:rgba(255,160,30,0.07);border:1px solid rgba(255,160,30,0.28);border-radius:8px;font-size:11px;color:var(--yellow);line-height:1.45;">
+        Amex isn't accepted everywhere — ${fallbackCard ? `${fallbackName} (from your recommended stack) has been added as a non-Amex fallback to cover the ${pct}% of spend Amex can't handle. Add it to your stack to replace the auto-fill.` : `Add ${fallbackName} to cover the ${pct}% of spend where Amex isn't accepted.`}
+      </div>`;
+    }
+
     // Compare vs recommended
-    if (window._currentStack?.length > 0) {
-      const recGross = computeCustomGross(window._currentStack);
-      const recFees  = window._currentStack.reduce((s, c) => s + c.effectiveFee, 0);
-      const recNet   = recGross - recFees;
+    if (window._lastStackNet != null) {
+      const recNet = window._lastStackNet;
       const diff = net - recNet;
       const sign  = diff >= 0 ? '+' : '−';
       const diffColor = diff >= 0 ? 'var(--green)' : '#c06060';
